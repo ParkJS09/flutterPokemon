@@ -1,3 +1,4 @@
+import 'package:core/core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/framework.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,8 +11,13 @@ class PokemonListScreen extends ConsumerStatefulWidget {
   _PokemonListScreenState createState() => _PokemonListScreenState();
 }
 
-class _PokemonListScreenState extends ConsumerState<PokemonListScreen> {
+class _PokemonListScreenState extends ConsumerState<PokemonListScreen>
+    with SingleTickerProviderStateMixin {
   final _scrollController = ScrollController();
+
+  // 로딩 애니메이션 컨트롤러
+  late AnimationController _loadingAnimationController;
+  late Animation<double> _loadingAnimation;
 
   @override
   void initState() {
@@ -20,6 +26,19 @@ class _PokemonListScreenState extends ConsumerState<PokemonListScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(pokemonViewModelProvider.notifier).loadPokemons();
     });
+
+    // 포켓볼 회전 애니메이션 설정
+    _loadingAnimationController = AnimationController(
+      vsync: this,
+      duration: Duration(seconds: 1),
+    )..repeat(); // 계속 반복
+
+    _loadingAnimation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(
+        parent: _loadingAnimationController,
+        curve: Curves.linear,
+      ),
+    );
   }
 
   void _onScroll() {
@@ -44,93 +63,274 @@ class _PokemonListScreenState extends ConsumerState<PokemonListScreen> {
       return Center(child: Text(state.error!));
     }
 
-    return RefreshIndicator(
-      onRefresh: () async {
-        ref.read(pokemonViewModelProvider.notifier).refresh();
-      },
-      child: ListView.builder(
-        controller: _scrollController,
-        itemCount: state.pokemons.length + (state.isLoading ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index == state.pokemons.length) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16.0),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          child: TextField(
+            decoration: InputDecoration(
+              hintText: '포켓몬 이름을 입력하세요',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            PokeChip(label: '필터'),
+            SizedBox(width: 8),
+            PokeChip(label: '필터'),
+            SizedBox(width: 8),
+            PokeChip(label: '필터'),
+          ],
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () async {
+              ref.read(pokemonViewModelProvider.notifier).refresh();
+            },
+            child: Stack(
+              children: [
+                GridView.builder(
+                  padding: EdgeInsets.all(AppSpacing.md),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    childAspectRatio: 0.75,
+                    crossAxisSpacing: AppSpacing.md,
+                    mainAxisSpacing: AppSpacing.md,
+                  ),
+                  controller: _scrollController,
+                  itemCount: state.pokemons.length,
+                  itemBuilder: (context, index) {
+                    final pokemon = state.pokemons[index];
+
+                    final typeColor =
+                        AppColors.typeColors[pokemon.type.toLowerCase()] ??
+                        AppColors.primary;
+
+                    return GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (context) =>
+                                    PokemonDetailScreen(id: pokemon.id),
+                          ),
+                        );
+                      },
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              color: typeColor.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.only(
+                                topLeft: Radius.circular(AppRadius.lg),
+                                topRight: Radius.circular(AppRadius.lg),
+                              ),
+                            ),
+                            child: Stack(
+                              children: [
+                                Positioned(
+                                  right: AppSpacing.sm,
+                                  top: AppSpacing.sm,
+                                  child: Text(
+                                    '#${pokemon.id.toString().padLeft(3, '0')}',
+                                    style: AppTextStyles.caption.copyWith(
+                                      color: typeColor,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                Center(
+                                  child: Hero(
+                                    tag: 'pokemon-${pokemon.id}',
+                                    child: Image.network(
+                                      pokemon.imageUrl,
+                                      width: 85,
+                                      height: 85,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: typeColor.withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.only(
+                                  bottomLeft: Radius.circular(AppRadius.lg),
+                                  bottomRight: Radius.circular(AppRadius.lg),
+                                ),
+                              ),
+                              padding: EdgeInsets.all(AppSpacing.md),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    pokemon.name,
+                                    style: AppTextStyles.listTitle.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  SizedBox(height: AppSpacing.xs),
+                                  PokeChip.forType(
+                                    pokemon.type,
+                                    size: WidgetSize.small,
+                                  ),
+                                  Spacer(),
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      _buildStatIndicator(
+                                        'ATK',
+                                        (pokemon.id % 100) + 50,
+                                        AppColors.statAttack,
+                                      ),
+                                      _buildStatIndicator(
+                                        'DEF',
+                                        (pokemon.id % 80) + 40,
+                                        AppColors.statDefense,
+                                      ),
+                                      _buildStatIndicator(
+                                        'SPD',
+                                        (pokemon.id % 120) + 30,
+                                        AppColors.statSpeed,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+
+                if (state.isLoading)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.white.withValues(alpha: 0),
+                            Colors.white.withValues(alpha: 0.5),
+                          ],
+                        ),
+                      ),
+                      child: Center(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: RotationTransition(
+                                turns: _loadingAnimation,
+                                child: Image.asset(
+                                  'assets/images/pokeball.png',
+                                  width: 28,
+                                  height: 28,
+                                  color: AppColors.primary,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    print('이미지 로드 실패: $error');
+                                    return Icon(
+                                      Icons.catching_pokemon,
+                                      color: Colors.red,
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: 12),
+                            Text(
+                              '더 많은 포켓몬 불러오는 중...',
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '포켓몬을 불러오는 중...',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          // 포켓몬 아이템 UI도 개선
-          final pokemon = state.pokemons[index];
-          return Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            elevation: 2,
-            child: ListTile(
-              contentPadding: const EdgeInsets.all(12),
-              leading: Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Hero(
-                  tag: 'pokemon-${pokemon.id}',
-                  child: Center(child: Image.network(pokemon.imageUrl)),
-                ),
-              ),
-              title: Text(
-                pokemon.name,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              subtitle: Text(
-                pokemon.type,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-              ),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-              onTap: () {
-                // 상세 페이지로 이동
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => PokemonDetailScreen(id: pokemon.id),
                   ),
-                );
-              },
+
+                if (state.isRefreshing)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      height: 3,
+                      child: LinearProgressIndicator(
+                        backgroundColor: Colors.transparent,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-          );
-        },
-      ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatIndicator(String label, int value, Color color) {
+    final percentage = value / 200.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w500),
+        ),
+        SizedBox(height: 4),
+        Container(
+          width: 28,
+          height: 3,
+          decoration: BoxDecoration(
+            color: Colors.grey.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(2),
+          ),
+          child: FractionallySizedBox(
+            alignment: Alignment.centerLeft,
+            widthFactor: percentage,
+            child: Container(
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
+    _loadingAnimationController.dispose(); // 애니메이션 컨트롤러 해제
     super.dispose();
   }
 }

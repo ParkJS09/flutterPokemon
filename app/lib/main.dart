@@ -1,3 +1,4 @@
+import 'package:core/theme/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:core/di/service_locator.dart';
 import 'package:data/di/service_locator.dart';
@@ -22,9 +23,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Flutter Demo',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-      ),
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.system, // 시스템 설정 따라가기
       home: PokemonListScreen(),
     );
   }
